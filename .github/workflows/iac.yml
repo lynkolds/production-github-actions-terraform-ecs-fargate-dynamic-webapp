@@ -1,0 +1,84 @@
+name: Deploy AWS Infrastructure
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_ACTION: apply # apply or destroy
+  
+  TF_VAR_region: "us-east-1"
+  TF_VAR_project_name: ""
+  TF_VAR_environment: ""
+
+  TF_VAR_vpc_cidr: "10.0.0.0/16"
+  TF_VAR_public_subnet_az1_cidr: "10.0.0.0/24"
+  TF_VAR_public_subnet_az2_cidr: "10.0.1.0/24"
+  TF_VAR_private_app_subnet_az1_cidr: "10.0.2.0/24"
+  TF_VAR_private_app_subnet_az2_cidr: "10.0.3.0/24"
+  TF_VAR_private_data_subnet_az1_cidr: "10.0.4.0/24"
+  TF_VAR_private_data_subnet_az2_cidr: "10.0.5.0/24"
+
+  TF_VAR_database_snapshot_identifier: ""
+  TF_VAR_database_instance_class: ""
+  TF_VAR_database_instance_identifier: ""
+  TF_VAR_multi_az_deployment: "true"
+
+  TF_VAR_target_type: "ip"
+
+  TF_VAR_repo_name: ""
+  TF_VAR_image_tag_mutability: "IMMUTABLE"
+  TF_VAR_force_delete: "true"
+  TF_VAR_scan_on_push: "true"
+  TF_VAR_enable_lifecycle_policy: "true"
+  TF_VAR_lifecycle_keep_last_n: "30"
+
+  TF_VAR_domain_name: ""
+  TF_VAR_record_name: "www"
+
+  TF_VAR_docker_env_secret_name: ""
+  TF_VAR_tags: '{"Project":""}'
+
+jobs:
+  deploy_aws_infrastructure:
+    environment:  # update with your environment name
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.6.6
+
+      - name: Terraform init
+        working-directory: ./terraform/iac
+        run: 
+            terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+
+            
+      - name: Terraform apply
+        working-directory: ./terraform/iac
+        run: terraform ${{ env.TERRAFORM_ACTION }} -auto-approve
+
+      - name: Show outputs
+        working-directory: ./terraform/iac
+        run: |
+          echo "private_app_subnet_az1_id:"
+          terraform output private_app_subnet_az1_id
+          echo "ecr_repository_uri:"
+          terraform output ecr_repository_uri
+          echo "runner_security_group_id:"
+          terraform output runner_security_group_id

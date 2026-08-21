@@ -1,0 +1,38 @@
+name: Build and Push Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        description: "Self-hosted runner label from the Start EC2 Runner workflow"
+        required: true
+        default: "" # replace with runner label from start runner workflow
+
+jobs:
+  build_and_push_image:
+    environment:  # update with your environment name
+    runs-on: ${{ inputs.runner_label }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Build Docker image
+        working-directory: ./assets/rentzone
+        run: docker build -t rentzone . # optional: modify rentzone with your image name
+
+      - name: Retag Docker image with ECR URI
+        run: docker tag rentzone ${{ secrets.ECR_REPOSITORY_URI }} # optional: modify rentzone with your image name
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Push Docker image
+        run: docker push ${{ secrets.ECR_REPOSITORY_URI }}
